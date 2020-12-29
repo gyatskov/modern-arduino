@@ -1,0 +1,10 @@
+#pragma once
+
+#include "stddef.h"
+
+
+namespace ftd {
+
+using size_t = unsigned long;
+
+}
