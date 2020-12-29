@@ -46,7 +46,7 @@ function( add_avr_executable EXECUTABLE_NAME )
         PATHS "${CMAKE_PREFIX_PATH}/lib/gcc/avr/${CMAKE_CXX_COMPILER_VERSION}/device-specs"
         REQUIRED
      )
-    message(STATUS "Using specs file: ${AVR_SPECS_FILE}")
+    message(VERBOSE "Using specs file: ${AVR_SPECS_FILE}")
 
     # Compilation flags
     target_compile_options( ${elf_file}
@@ -153,8 +153,7 @@ function( add_avr_executable EXECUTABLE_NAME )
     )
 
     # size
-    add_custom_target(
-       size_${EXECUTABLE_NAME}
+    add_custom_target( size_${EXECUTABLE_NAME}
           ${AVR_SIZE_TOOL} ${AVR_SIZE_ARGS} ${elf_file}  "|" ${AWK} -f firmwaresize_${EXECUTABLE_NAME}.awk
        DEPENDS ${elf_file} firmwaresize_${EXECUTABLE_NAME}.awk
     )
@@ -175,3 +174,118 @@ function( add_avr_executable EXECUTABLE_NAME )
     )
 
 endfunction( add_avr_executable EXECUTABLE_NAME )
+
+##########################################################################
+# add_avr_library
+# - IN_VAR: LIBRARY_NAME
+#
+# Calls add_library with an optionally concatenated name
+# <LIBRARY_NAME>${MCU_TYPE_FOR_FILENAME}.
+# This needs to be used for linking against the library, e.g. calling
+# target_link_libraries(...).
+##########################################################################
+function( add_avr_library LIBRARY_NAME )
+
+    if( NOT ARGN )
+       message( FATAL_ERROR "No source files given for ${LIBRARY_NAME}." )
+    endif( NOT ARGN )
+
+    set( lib_file ${LIBRARY_NAME}${MCU_TYPE_FOR_FILENAME} )
+
+    add_library( ${lib_file} ${ARGN} )
+
+    get_target_property(lib_type ${lib_file} TYPE)
+    if ( lib_type  STREQUAL "STATIC_LIBRARY" )
+        set_target_properties(
+           ${lib_file}
+           PROPERTIES
+              OUTPUT_NAME "${lib_file}"
+        )
+    endif ( lib_type  STREQUAL "STATIC_LIBRARY" )
+
+    # Specs file from library
+    find_file(AVR_SPECS_FILE
+        NAMES "specs-${AVR_DEVICE}"
+        PATHS "${CMAKE_PREFIX_PATH}/lib/gcc/avr/${CMAKE_CXX_COMPILER_VERSION}/device-specs"
+        REQUIRED
+    )
+    message(VERBOSE "Using specs file: ${AVR_SPECS_FILE}")
+
+    set( scope "PUBLIC" )
+    if ( lib_type  STREQUAL "INTERFACE_LIBRARY" )
+        set( scope "INTERFACE" )
+    endif ( lib_type  STREQUAL "INTERFACE_LIBRARY" )
+
+
+    # Compilation flags: Same as for executables
+    # TODO: Refactor
+    target_compile_options( ${lib_file}
+        ${scope}
+         -ffunction-sections
+         -fdata-sections
+         -fpack-struct
+         -fshort-enums
+         -funsigned-char
+         -funsigned-bitfields
+         -specs=${AVR_SPECS_FILE}
+         -DF_CPU=${AVR_CPU_FREQ}
+         -Os
+    )
+
+    if( NOT TARGET ${LIBRARY_NAME} )
+       add_custom_target(
+          ${LIBRARY_NAME}
+          ALL
+          DEPENDS ${lib_file}
+       )
+
+       get_target_property(library_target_type ${LIBRARY_NAME} TYPE)
+       if ( library_target_type  STREQUAL "STATIC_LIBRARY" )
+           set_target_properties(
+              ${LIBRARY_NAME}
+              PROPERTIES
+                 OUTPUT_NAME "${lib_file}"
+           )
+       endif ( library_target_type STREQUAL "STATIC_LIBRARY" )
+    endif( NOT TARGET ${LIBRARY_NAME} )
+
+endfunction( add_avr_library )
+
+
+##########################################################################
+# avr_target_link_libraries
+# - IN_VAR: EXECUTABLE_TARGET
+# - ARGN  : targets and files to link to
+#
+# Calls target_link_libraries with AVR target names (concatenation,
+# extensions and so on.
+##########################################################################
+function( avr_target_link_libraries EXECUTABLE_TARGET )
+
+   if( NOT ARGN )
+      message( FATAL_ERROR "Nothing to link to ${EXECUTABLE_TARGET}." )
+   endif( NOT ARGN )
+
+   get_target_property( TARGET_LIST ${EXECUTABLE_TARGET} OUTPUT_NAME )
+
+   foreach( TGT ${ARGN} )
+      if( TARGET ${TGT} )
+
+       get_target_property(library_target_type ${TGT} TYPE)
+       if ( library_target_type  STREQUAL "STATIC_LIBRARY" )
+         get_target_property( ARG_NAME ${TGT} OUTPUT_NAME )
+         list( APPEND TARGET_LIST "${ARG_NAME}" )
+       else ( library_target_type  STREQUAL "STATIC_LIBRARY" )
+           list( APPEND TARGET_LIST "${TGT}" )
+       endif ( library_target_type  STREQUAL "STATIC_LIBRARY" )
+
+      else( TARGET ${TGT} )
+          message(STATUS "Not a target: ${TGT}")
+         list( APPEND NON_TARGET_LIST ${TGT} )
+      endif( TARGET ${TGT} )
+
+   endforeach( TGT ${ARGN} )
+
+   target_link_libraries( ${TARGET_LIST} ${NON_TARGET_LIST} )
+
+endfunction( avr_target_link_libraries EXECUTABLE_TARGET )
