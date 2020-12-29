@@ -11,11 +11,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 feature_summary(WHAT ALL)
 
-# Host-specific settings which can be overridden
-set(AVR_PORT /dev/ttyACM0)
-set(AVR_PROGRAMMER arduino)
-set(AVR_UPLOADER avrdude)
-set(AVR_BAUD 115200)
+# Host-specific settings for configuration
+set(AVR_PORT        /dev/ttyACM0)
+set(AVR_PROGRAMMER  arduino)
+set(AVR_UPLOADER    avrdude)
+set(AVR_BAUD        115200)
 
 include(cmake/avr-functions.cmake)
 
